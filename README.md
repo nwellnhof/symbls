@@ -37,7 +37,9 @@ of a package.
 `show_package.sh` shows information about the binaries found in a
 package.
 
-`show_refs.sh` shows use counts for each exported symbol in a binary.
+`show_defs.sh` shows use counts for each exported symbol in a binary.
+
+`show_refs.sh` shows referenced symbols in a binary.
 
 `show_sym.sh` shows information about a symbol.
 
@@ -59,7 +61,7 @@ Show information about the package.
 Show exported symbols.
 
 ```
-$ sh show_refs.sh /usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
+$ sh show_defs.sh /usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
 F|xslAddCall|0
 F|xslDropCall|0
 F|xslHandleDebugger|0
