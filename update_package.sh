@@ -38,7 +38,7 @@ echo "Updating $PACKAGE"
 
 rm -rf tmp
 mkdir -p tmp/data
-tar xf "$DEBFILE" -C tmp
+(cd tmp && ar -x "../$DEBFILE")
 tar xf tmp/data.tar.xz -C tmp/data
 
 ./symbls "$PACKAGE" tmp/data
