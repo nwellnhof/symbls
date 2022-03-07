@@ -188,7 +188,9 @@ process_file(const char *filename, const struct stat *sb, int typeflag) {
     fprintf(g_out_ref,
             "INSERT INTO file (file, soname, package) VALUES\n"
             "('%s','%s','%s');\n",
-            filename + g_len_data_dir, soname, g_package);
+            filename + g_len_data_dir,
+            soname ? soname : "",
+            g_package);
 
     scn = NULL;
     num_ref = 0;
