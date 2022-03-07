@@ -46,11 +46,19 @@ from the `.dynsym` section and gathering additional data.
 
 ## Example
 
+Create or update the database. This will take a while.
+
+    $ sh update_rdeps.sh libxslt1.1
+
+Show information about the package.
+
+    $ sh show_package.sh libxslt1.1
+    /usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34|libxslt.so.1
+    /usr/lib/x86_64-linux-gnu/libexslt.so.0.8.20|libexslt.so.0
+
+Show exported symbols.
+
 ```
-$ sh update_rdeps.sh libxslt1.1
-$ sh show_package.sh libxslt1.1
-/usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34|libxslt.so.1
-/usr/lib/x86_64-linux-gnu/libexslt.so.0.8.20|libexslt.so.0
 $ sh show_refs.sh /usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
 F|xslAddCall|0
 F|xslDropCall|0
@@ -68,6 +76,11 @@ F|xsltApplyStylesheet|51
 F|xsltApplyStylesheetUser|24
 F|xsltApplyTemplates|0
 ...
+```
+
+Show information about a symbol.
+
+```
 $ sh show_sym.sh xsltApplyStylesheetUser
 Definitions:
 libxslt1.1|/usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
