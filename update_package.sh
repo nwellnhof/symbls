@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 PACKAGE="$1"
 if [ -z "$PACKAGE" ]; then
     echo "Usage: $0 PACKAGE"

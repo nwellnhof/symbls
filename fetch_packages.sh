@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 if [ -z "$DEBIAN_MIRROR" ]; then
     echo "DEBIAN_MIRROR not set"
     exit 1

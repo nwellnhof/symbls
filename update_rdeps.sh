@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 if [ ! -e libxml2.rdeps ]; then
     sh fetch_packages.sh
 fi
