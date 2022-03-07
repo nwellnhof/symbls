@@ -301,6 +301,12 @@ error:
     return ret;
 }
 
+static void
+db_command(const char *str) {
+    fputs(str, g_out_def);
+    fputs(str, g_out_ref);
+}
+
 int
 main(int argc, const char **argv) {
     int ret = 1;
@@ -327,7 +333,13 @@ main(int argc, const char **argv) {
         goto error;
     }
 
+    db_command("PRAGMA synchronous = OFF;\n"
+               "PRAGMA journal_mode = MEMORY;\n"
+               "BEGIN TRANSACTION;\n");
+
     ret = ftw(g_data_dir, process_file, 32);
+
+    db_command("END TRANSACTION;\n");
 
 error:
     if (g_out_ref)

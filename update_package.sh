@@ -47,8 +47,8 @@ if [ $RETVAL -eq 0 ]; then
     if [ ! -e symbls.db ]; then
         sqlite3 symbls.db <symbls.sql
     fi
-    sqlite3 symbls.db <update_defs.sql
-    sqlite3 symbls.db <update_refs.sql
+    sqlite3 symbls.db <update_defs.sql >/dev/null
+    sqlite3 symbls.db <update_refs.sql >/dev/null
 fi
 
 rm -f update_defs.sql update_refs.sql
