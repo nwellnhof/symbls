@@ -1,3 +1,5 @@
+#define _XOPEN_SOURCE 500
+
 #include <fcntl.h>
 #include <ftw.h>
 #include <stdio.h>
@@ -63,8 +65,10 @@ find_copy_relocs(Elf *elf, size_t s_ndx, unsigned *syms) {
 }
 
 static int
-process_file(const char *filename, const struct stat *sb, int typeflag) {
+process_file(const char *filename, const struct stat *sb, int typeflag,
+             struct FTW *info) {
     (void) sb;
+    (void) info;
     int ret = 1;
     int fd = -1;
     Elf *elf = NULL;
@@ -339,7 +343,7 @@ main(int argc, const char **argv) {
                "PRAGMA journal_mode = MEMORY;\n"
                "BEGIN TRANSACTION;\n");
 
-    ret = ftw(g_data_dir, process_file, 32);
+    ret = nftw(g_data_dir, process_file, 32, FTW_PHYS);
 
     db_command("END TRANSACTION;\n");
 
