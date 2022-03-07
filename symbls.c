@@ -127,6 +127,9 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
     }
 
     fprintf(g_out_def,
+            "DELETE FROM file WHERE file='%s';\n",
+            filename + g_len_data_dir);
+    fprintf(g_out_def,
             "DELETE FROM definition WHERE file='%s';\n",
             filename + g_len_data_dir);
     fprintf(g_out_ref,
