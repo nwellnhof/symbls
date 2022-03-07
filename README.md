@@ -67,6 +67,7 @@ F|xsltApplyStripSpaces|0
 F|xsltApplyStylesheet|51
 F|xsltApplyStylesheetUser|24
 F|xsltApplyTemplates|0
+...
 $ sh show_sym.sh xsltApplyStylesheetUser
 Definitions:
 libxslt1.1|/usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
@@ -98,7 +99,6 @@ python3-lxml-dbg|/usr/lib/python3/dist-packages/lxml/etree.cpython-39d-x86_64-li
 tclxml|/usr/lib/tcltk/x86_64-linux-gnu/tclxml3.2/libtclxml3.2.so
 xmlstarlet|/usr/bin/xmlstarlet
 xsltproc|/usr/bin/xsltproc
-...
 ```
 
 ## Future directions
