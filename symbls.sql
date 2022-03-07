@@ -3,6 +3,8 @@ CREATE TABLE file (
         soname  TEXT NOT NULL,
         package TEXT NOT NULL
 );
+CREATE INDEX file_file_index ON file (file);
+CREATE INDEX file_package_index ON file (package);
 
 CREATE TABLE definition (
         file    TEXT NOT NULL,
