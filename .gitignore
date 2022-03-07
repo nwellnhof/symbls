@@ -1,6 +1,6 @@
+/*.rdeps
+/*.o
 /deb
 /deb.xz
-/libxml2.rdeps
 /symbls
 /symbls.db
-/symbls.o

@@ -26,20 +26,47 @@ development on my MacBook.
 ## Overview
 
 `fetch_packages.sh` fetches the `Packages.xz` file from a Debian
-mirror, extracts a list of all packages depending on libxml2, and
-creates a compressed textual database to lookup package URLs.
+mirror and extracts useful data.
 
 `update_package.sh` updates the database with the contents of a
 package.
 
-`update_rdeps.sh` updates the contents of all libxml2 reverse
-dependencies. This downloads about 1 GB of packages, which are cached,
-and creates a 450 MB SQLite database on my system.
+`update_rdeps.sh` updates the database with all reverse dependencies
+of a package.
 
-`libxml2_syms.sh` generates an example report.
+`show_package.sh` shows information about the binaries found in a
+package.
+
+`show_refs.sh` shows use counts for each exported symbol in a binary.
 
 The `symbls` C program does most of the work extracting dynamic symbols
 from the `.dynsym` section and gathering additional data.
+
+## Example
+
+```sh
+$ sh update_rdeps.sh libxslt1.1
+$ sh show_package.sh libxslt1.1
+/usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34|libxslt.so.1
+/usr/lib/x86_64-linux-gnu/libexslt.so.0.8.20|libexslt.so.0
+$ sh show_refs.sh /usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
+F|xslAddCall|0
+F|xslDropCall|0
+F|xslHandleDebugger|0
+F|xsltAddKey|0
+F|xsltAddStackElemList|0
+F|xsltAddTemplate|0
+F|xsltAllocateExtra|0
+F|xsltAllocateExtraCtxt|0
+F|xsltApplyAttributeSet|0
+F|xsltApplyImports|0
+F|xsltApplyOneTemplate|4
+F|xsltApplyStripSpaces|0
+F|xsltApplyStylesheet|51
+F|xsltApplyStylesheetUser|24
+F|xsltApplyTemplates|0
+...
+```
 
 ## Future directions
 

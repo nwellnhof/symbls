@@ -13,11 +13,14 @@ curl -s -O "$DEBIAN_MIRROR/dists/Debian11.2/main/binary-amd64/Packages.xz"
 
 xzcat Packages.xz | egrep '^(Package|Filename):' | xz -c >deb.xz
 
-AWK_DEPS=$(cat <<'EOF'
-/^Package:/ { p=$2 }
-/^Depends:.* libxml2 / { print p }
+package="$1"
+if [ -n "$package" ]; then
+    awk_deps=$(cat <<EOF
+/^Package:/ { r=\$2 }
+/^Depends:.* $package / { print r }
 EOF
 )
-xzcat Packages.xz | awk "$AWK_DEPS" | sort >libxml2.rdeps
+    xzcat Packages.xz | awk "$awk_deps" | sort >"$package.rdeps"
+fi
 
 rm Packages.xz
