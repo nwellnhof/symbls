@@ -39,7 +39,7 @@ echo "Updating $PACKAGE"
 rm -rf tmp
 mkdir -p tmp/data
 (cd tmp && ar -x "../$DEBFILE")
-tar xf tmp/data.tar.xz -C tmp/data
+tar xf tmp/data.tar.[gx]z -C tmp/data
 
 ./symbls "$PACKAGE" tmp/data
 RETVAL=$?
@@ -52,5 +52,6 @@ if [ $RETVAL -eq 0 ]; then
 fi
 
 rm -f update_defs.sql update_refs.sql
+chmod -R u+w tmp
 rm -rf tmp
 exit $RETVAL
