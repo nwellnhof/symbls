@@ -1,31 +1,32 @@
-CREATE TABLE file (
-        file    TEXT NOT NULL,
+CREATE TABLE binary (
+        path    TEXT PRIMARY KEY,
         soname  TEXT NOT NULL,
         package TEXT NOT NULL
-);
-CREATE INDEX file_file_index ON file (file);
-CREATE INDEX file_package_index ON file (package);
+) WITHOUT ROWID;
+CREATE INDEX binary_package_index ON binary (package);
 
 CREATE TABLE definition (
-        file    TEXT NOT NULL,
+        path    TEXT NOT NULL,
         symbol  TEXT NOT NULL,
-        type    CHAR(1) NOT NULL
-);
+        type    CHAR(1) NOT NULL,
+        bind    CHAR(1) NOT NULL,
+        size    INTEGER NOT NULL,
+        PRIMARY KEY (path, symbol)
+) WITHOUT ROWID;
 CREATE INDEX definition_symbol_index ON definition (symbol);
-CREATE INDEX definition_file_index ON definition (file);
 
 CREATE TABLE reference (
-        file    TEXT NOT NULL,
+        path    TEXT NOT NULL,
         symbol  TEXT NOT NULL,
-        type    CHAR(1) NOT NULL
-);
+        type    CHAR(1) NOT NULL,
+        PRIMARY KEY (path, symbol)
+) WITHOUT ROWID;
 CREATE INDEX reference_symbol_index ON reference (symbol);
-CREATE INDEX reference_file_index ON reference (file);
 
 CREATE TABLE so_reference (
-        file    TEXT NOT NULL,
-        soname  TEXT NOT NULL
-);
+        path    TEXT NOT NULL,
+        soname  TEXT NOT NULL,
+        PRIMARY KEY (path, soname)
+) WITHOUT ROWID;
 CREATE INDEX so_reference_soname_index ON so_reference (soname);
-CREATE INDEX so_reference_file_index ON so_reference (file);
 

@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <ftw.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,7 @@ find_copy_relocs(Elf *elf, size_t s_ndx, unsigned *syms) {
             return -1;
 
         if (shdr->sh_type == SHT_REL && shdr->sh_link == s_ndx) {
+            /* The valgrind package has SHT_REL! */
             fprintf(stderr, "warning: SHT_REL found\n");
         } else if (shdr->sh_type == SHT_RELA && shdr->sh_link == s_ndx) {
             Elf_Data *rela_data = elf_getdata(scn, NULL);
@@ -64,6 +66,20 @@ find_copy_relocs(Elf *elf, size_t s_ndx, unsigned *syms) {
     return k;
 }
 
+static void
+warn(const char *path, int *flag, const char *fmt, ...) {
+    va_list ap;
+
+    if (*flag == 0) {
+        fprintf(stderr, "Warnings for %s\n", path);
+        *flag = 1;
+    }
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
 static int
 process_file(const char *filename, const struct stat *sb, int typeflag,
              struct FTW *info) {
@@ -76,6 +92,7 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
     int is_lib;
     size_t num_def;
     size_t num_ref;
+    int warn_flag = 0;
 
     if (typeflag != FTW_F)
         return 0;
@@ -85,6 +102,7 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
         fprintf(stderr, "%s: doesn't start with '%s/'", filename, g_data_dir);
         goto error;
     }
+    const char *path = filename + g_len_data_dir;
 
     fd = open(filename, O_RDONLY);
     if (fd == -1) {
@@ -99,7 +117,7 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
     GElf_Ehdr ehdr_mem;
     GElf_Ehdr *ehdr = gelf_getehdr(elf, &ehdr_mem);
     if (ehdr == NULL) {
-        elf_perror(filename);
+        elf_perror(path);
         goto error;
     }
 
@@ -107,18 +125,27 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
         is_lib = 0;
     } else if (ehdr->e_type == ET_DYN) {
         /*
-         * An INTERP program header identifies PIE executables.
+         * Unfortunately, ELF doesn't distinguish between dynamic libraries
+         * and loadable modules. In order to avoid processing a huge
+         * number of definitions from loadable modules, PIE executables,
+         * or other binaries that aren't actual libraries, we check
+         * whether the binary can be found in the hard-coded ld.so search
+         * paths. This will miss some libraries in non-standard directories,
+         * typically found via rpath.
          */
-        is_lib = 1;
-        for (size_t cnt = 0; cnt < ehdr->e_phnum; cnt++) {
-            GElf_Phdr phdr_mem;
-            GElf_Phdr *phdr = gelf_getphdr(elf, cnt, &phdr_mem);
-            if (phdr == NULL) {
-                elf_perror(filename);
-                goto error;
-            }
-            if (phdr->p_type == PT_INTERP) {
-                is_lib = 0;
+        const char *search_paths[] = {
+            "/lib/x86_64-linux-gnu/",
+            "/usr/lib/x86_64-linux-gnu/",
+            "/usr/local/lib/x86_64-linux-gnu/"
+        };
+        size_t num_search_paths =
+            sizeof(search_paths) / sizeof(search_paths[0]);
+        is_lib = 0;
+        for (size_t i = 0; i < num_search_paths; i++) {
+            size_t sp_len = strlen(search_paths[i]);
+            if (strncmp(path, search_paths[i], sp_len) == 0 &&
+                strchr(path + sp_len, '/') == NULL) {
+                is_lib = 1;
                 break;
             }
         }
@@ -126,134 +153,216 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
         goto success;
     }
 
-    fprintf(g_out_def,
-            "DELETE FROM file WHERE file='%s';\n",
-            filename + g_len_data_dir);
-    fprintf(g_out_def,
-            "DELETE FROM definition WHERE file='%s';\n",
-            filename + g_len_data_dir);
-    fprintf(g_out_ref,
-            "DELETE FROM reference WHERE file='%s';\n",
-            filename + g_len_data_dir);
-    fprintf(g_out_ref,
-            "DELETE FROM reference WHERE file='%s';\n",
-            filename + g_len_data_dir);
-
-    const char *soname = NULL;
+    Elf_Data *dynamic_data = NULL;
+    GElf_Shdr dynamic_shdr = { 0 };
+    Elf_Data *dynsym_data = NULL;
+    GElf_Shdr dynsym_shdr = { 0 };
+    Elf_Data *versym_data = NULL;
+    GElf_Shdr versym_shdr = { 0 };
     Elf_Scn *scn = NULL;
-    num_ref = 0;
     while ((scn = elf_nextscn(elf, scn)) != NULL) {
         GElf_Shdr shdr_mem;
         GElf_Shdr *shdr = gelf_getshdr(scn, &shdr_mem);
         if (shdr == NULL) {
-            elf_perror(filename);
+            elf_perror(path);
             goto error;
         }
-
-        if (shdr->sh_type != SHT_DYNAMIC)
-            continue;
-
-        size_t nentries = shdr->sh_entsize ?
-                          shdr->sh_size / shdr->sh_entsize :
-                          0;
         Elf_Data *data = elf_getdata(scn, NULL);
         if (data == NULL) {
-            elf_perror(filename);
+            elf_perror(path);
             goto error;
         }
 
+        switch (shdr->sh_type) {
+            case SHT_DYNAMIC:
+                dynamic_data = data;
+                dynamic_shdr = *shdr;
+                break;
+            case SHT_DYNSYM:
+                dynsym_data = data;
+                dynsym_shdr = *shdr;
+                break;
+            case SHT_GNU_versym:
+                versym_data = data;
+                versym_shdr = *shdr;
+                break;
+            default:
+                break;
+        }
+    }
+
+    fprintf(g_out_def,
+            "DELETE FROM binary WHERE path='%s';\n",
+            path);
+    fprintf(g_out_def,
+            "DELETE FROM definition WHERE path='%s';\n",
+            path);
+    fprintf(g_out_ref,
+            "DELETE FROM reference WHERE path='%s';\n",
+            path);
+    fprintf(g_out_ref,
+            "DELETE FROM so_reference WHERE path='%s';\n",
+            path);
+
+    const char *soname = "";
+    num_ref = 0;
+    if (dynamic_data) {
+        size_t nentries = dynamic_shdr.sh_entsize ?
+                          dynamic_shdr.sh_size / dynamic_shdr.sh_entsize :
+                          0;
         for (size_t cnt = 0; cnt < nentries; ++cnt) {
             GElf_Dyn dyn_mem;
-            GElf_Dyn *dyn = gelf_getdyn(data, cnt, &dyn_mem);
+            GElf_Dyn *dyn = gelf_getdyn(dynamic_data, cnt, &dyn_mem);
             if (dyn == NULL) {
-                elf_perror(filename);
+                elf_perror(path);
                 goto error;
             }
             if (dyn->d_tag == DT_SONAME) {
-                if (is_lib)
-                    soname = elf_strptr(elf, shdr->sh_link, dyn->d_un.d_val);
+                soname = elf_strptr(elf, dynamic_shdr.sh_link,
+                                    dyn->d_un.d_val);
             } else if (dyn->d_tag == DT_NEEDED) {
-                const char *needed = elf_strptr(elf, shdr->sh_link,
+                const char *needed = elf_strptr(elf, dynamic_shdr.sh_link,
                         dyn->d_un.d_val);
                 fprintf(g_out_ref, "%s('%s','%s')",
                         num_ref ?
                             ",\n" :
                             "INSERT INTO so_reference"
-                            " (file, soname) VALUES\n",
-                        filename + g_len_data_dir,
+                            " (path, soname) VALUES\n",
+                        path,
                         needed);
                 num_ref += 1;
             }
         }
-
-        break;
     }
+
+    /*
+     * libc has an INTERP program header and is misidentified as PIE
+     * executable.
+     */
+    if (strcmp(soname, "libc.so.6") == 0)
+        is_lib = 1;
 
     if (num_ref)
         fprintf(g_out_ref, ";\n");
 
     fprintf(g_out_ref,
-            "INSERT INTO file (file, soname, package) VALUES\n"
+            "INSERT INTO binary (path, soname, package) VALUES\n"
             "('%s','%s','%s');\n",
-            filename + g_len_data_dir,
-            soname ? soname : "",
+            path,
+            soname,
             g_package);
 
-    scn = NULL;
     num_ref = 0;
     num_def = 0;
-    while ((scn = elf_nextscn(elf, scn)) != NULL) {
-        GElf_Shdr shdr_mem;
-        GElf_Shdr *shdr = gelf_getshdr(scn, &shdr_mem);
-        if (shdr == NULL) {
-            elf_perror(filename);
-            goto error;
-        }
-
-        if (shdr->sh_type != SHT_DYNSYM)
-            continue;
-
+    if (dynsym_data != NULL) {
         int nrelocs = find_copy_relocs(elf, elf_ndxscn(scn), NULL);
         if (nrelocs < 0) {
-            elf_perror(filename);
+            elf_perror(path);
             goto error;
         }
         free(relocs);
         relocs = malloc(nrelocs * sizeof(relocs[0]));
         if (relocs == NULL) {
-            perror(filename);
+            perror(path);
             goto error;
         }
         if (find_copy_relocs(elf, elf_ndxscn(scn), relocs) < 0) {
-            elf_perror(filename);
+            elf_perror(path);
             goto error;
         }
 
-        size_t nentries = shdr->sh_entsize ?
-                          shdr->sh_size / shdr->sh_entsize :
+        size_t nentries = dynsym_shdr.sh_entsize ?
+                          dynsym_shdr.sh_size / dynsym_shdr.sh_entsize :
                           0;
-        Elf_Data *data = elf_getdata(scn, NULL);
-        if (data == NULL) {
-            elf_perror(filename);
-            goto error;
+        Elf64_Half *versym_ndx = NULL;
+
+        if (versym_data) {
+            size_t vnentries = versym_shdr.sh_size / sizeof(Elf64_Half);
+            if (vnentries < nentries) {
+                fprintf(stderr, "%s: invalid versym section\n", path);
+                goto error;
+            }
+            versym_ndx = versym_data ? versym_data->d_buf : NULL;
         }
 
         for (size_t cnt = 0; cnt < nentries; ++cnt) {
             GElf_Sym sym_mem;
-            GElf_Sym *sym = gelf_getsym(data, cnt, &sym_mem);
-            if (data == NULL) {
-                elf_perror(filename);
+            GElf_Sym *sym = gelf_getsym(dynsym_data, cnt, &sym_mem);
+            if (sym == NULL) {
+                elf_perror(path);
                 goto error;
             }
-            int type = GELF_ST_TYPE(sym->st_info);
-            int bind = GELF_ST_BIND(sym->st_info);
 
-            if ((type != STT_OBJECT && type != STT_FUNC) ||
-                (bind != STB_GLOBAL))
+            int type = GELF_ST_TYPE(sym->st_info);
+            int type_char;
+            switch (type) {
+                case STT_OBJECT:
+                    type_char = 'O';
+                    break;
+                case STT_FUNC:
+                    type_char = 'F';
+                    break;
+                case STT_TLS:
+                    type_char = 'T';
+                    break;
+                case STT_GNU_IFUNC:
+                    type_char = 'I';
+                    break;
+                case STT_NOTYPE:
+                case STT_SECTION:
+                    continue;
+                default:
+                    warn(path, &warn_flag, "Unknown st_type: %d\n", type);
+                    continue;
+            }
+
+            int bind = GELF_ST_BIND(sym->st_info);
+            int bind_char;
+            switch (bind) {
+                case STB_GLOBAL:
+                    bind_char = 'G';
+                    break;
+                case STB_WEAK:
+                    bind_char = 'W';
+                    break;
+                case STB_GNU_UNIQUE:
+                    bind_char = 'U';
+                    break;
+                case STB_LOCAL:
+                    continue;
+                default:
+                    warn(path, &warn_flag, "Unknown st_bind: %d\n", bind);
+                    continue;
+            }
+
+            if (versym_ndx && versym_ndx[cnt] & 0x8000)
+                continue;
+
+            const char *name = elf_strptr(elf, dynsym_shdr.sh_link,
+                                          sym->st_name);
+            if (name == NULL || name[0] == 0) {
+                warn(path, &warn_flag, "Empty name\n");
+                continue;
+            }
+            /*
+             * Skip C++ symbols. Unfortunately, many C++ projects
+             * unnecessarily export huge numbers of symbols. The mangled
+             * names also tend to be long, creating a much larger database.
+             */
+            if (name[0] == '_' && name[1] == 'Z')
+                continue;
+            /* Skip golang symbols */
+            if (strchr(name, '.') != NULL)
+                continue;
+
+            /* Special sections */
+            if (sym->st_shndx >= SHN_LORESERVE)
                 continue;
 
             int defined = 0;
-            if (sym->st_shndx != SHN_UNDEF) {
+            if (bind == STB_WEAK) {
+                defined = 1;
+            } else if (sym->st_shndx != SHN_UNDEF) {
                 defined = 1;
                 for (int i = 0; i < nrelocs; i++) {
                     if (relocs[i] == cnt) {
@@ -266,28 +375,24 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
             if (defined && !is_lib)
                 continue;
 
-            FILE *out;
-            const char *prefix;
             if (defined) {
-                out = g_out_def;
-                prefix = num_def ?
+                const char *prefix = num_def ?
                          ",\n" :
-                         "INSERT INTO definition"
-                         " (symbol, type, file) VALUES\n";
+                         "INSERT OR IGNORE INTO definition"
+                         " (path, type, symbol, bind, size) VALUES\n";
+                fprintf(g_out_def, "%s('%s','%c','%s','%c',%lu)",
+                        prefix, path, type_char, name, bind_char,
+                        sym->st_size);
                 num_def += 1;
             } else {
-                out = g_out_ref;
-                prefix = num_ref ?
+                const char *prefix = num_ref ?
                          ",\n" :
-                         "INSERT INTO reference"
-                         " (symbol, type, file) VALUES\n";
+                         "INSERT OR IGNORE INTO reference"
+                         " (path, type, symbol) VALUES\n";
+                fprintf(g_out_ref, "%s('%s','%c','%s')",
+                        prefix, path, type_char, name);
                 num_ref += 1;
             }
-            fprintf(out, "%s('%s','%c','%s')",
-                    prefix,
-                    elf_strptr(elf, shdr->sh_link, sym->st_name),
-                    type == STT_FUNC ? 'F' : 'O',
-                    filename + g_len_data_dir);
         }
     }
 

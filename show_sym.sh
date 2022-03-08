@@ -10,17 +10,17 @@ fi
 
 echo "Definitions:"
 sqlite3 symbls.db "
-SELECT package, d.file FROM definition d
-    LEFT JOIN file f ON d.file=f.file
-    WHERE symbol='$symbol'
-    ORDER BY package, d.file
+SELECT b.package, d.path, d.type FROM definition d
+    LEFT JOIN binary b ON d.path=b.path
+    WHERE d.symbol='$symbol'
+    ORDER BY b.package, d.path, d.type
 "
 echo
 
 echo "References:"
 sqlite3 symbls.db "
-SELECT package, r.file FROM reference r
-    LEFT JOIN file f ON r.file=f.file
-    WHERE symbol='$symbol'
-    ORDER BY package, r.file
+SELECT b.package, r.path, r.type FROM reference r
+    LEFT JOIN binary b ON r.path=b.path
+    WHERE r.symbol='$symbol'
+    ORDER BY b.package, r.path, r.type
 "
