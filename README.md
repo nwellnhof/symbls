@@ -25,43 +25,38 @@ development on my MacBook.
 
 ## Overview
 
-`fetch_packages.sh` fetches the `Packages.xz` file from a Debian
-mirror and extracts useful data.
+`index.sh` updates the database with the contents of a package or all
+its reverse dependencies.
 
-`update_package.sh` updates the database with the contents of a
-package.
-
-`update_rdeps.sh` updates the database with all reverse dependencies
-of a package.
-
-`show_package.sh` shows information about the binaries found in a
-package.
-
-`show_defs.sh` shows use counts for each exported symbol in a binary.
-
-`show_refs.sh` shows referenced symbols in a binary.
-
-`show_sym.sh` shows information about a symbol.
+    sh index.sh package <PACKAGE>
+    sh index.sh rdeps <PACKAGE>
 
 The `symbls` C program does most of the work extracting dynamic symbols
 from the `.dynsym` section and gathering additional data.
+
+`query.sh` queries the database.
+
+    sh query.sh package <PACKAGE>   # Show package
+    sh query.sh symbol <SYMBOL>     # Show symbol
+    sh query.sh defs <BINARY-PATH>  # Show definitions of a binary
+    sh query.sh refs <BINARY-PATH>  # Show references of a binary
 
 ## Example
 
 Create or update the database. This will take a while.
 
-    $ sh update_rdeps.sh libxslt1.1
+    $ sh index.sh rdeps libxslt1.1
 
 Show information about the package.
 
-    $ sh show_package.sh libxslt1.1
+    $ sh query.sh package libxslt1.1
     /usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34|libxslt.so.1
     /usr/lib/x86_64-linux-gnu/libexslt.so.0.8.20|libexslt.so.0
 
 Show exported symbols.
 
 ```
-$ sh show_defs.sh /usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
+$ sh query.sh defs /usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
 F|xslAddCall|0
 F|xslDropCall|0
 F|xslHandleDebugger|0
@@ -83,7 +78,7 @@ F|xsltApplyTemplates|0
 Show information about a symbol.
 
 ```
-$ sh show_sym.sh xsltApplyStylesheetUser
+$ sh query.sh symbol xsltApplyStylesheetUser
 Definitions:
 libxslt1.1|/usr/lib/x86_64-linux-gnu/libxslt.so.1.1.34
 

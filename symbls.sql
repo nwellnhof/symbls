@@ -19,6 +19,7 @@ CREATE TABLE reference (
         path    TEXT NOT NULL,
         symbol  TEXT NOT NULL,
         type    CHAR(1) NOT NULL,
+        bind    CHAR(1) NOT NULL,
         PRIMARY KEY (path, symbol)
 ) WITHOUT ROWID;
 CREATE INDEX reference_symbol_index ON reference (symbol);

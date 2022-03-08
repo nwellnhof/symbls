@@ -90,8 +90,6 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
     Elf *elf = NULL;
     unsigned *relocs = NULL;
     int is_lib;
-    size_t num_def;
-    size_t num_ref;
     int warn_flag = 0;
 
     if (typeflag != FTW_F)
@@ -103,6 +101,22 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
         goto error;
     }
     const char *path = filename + g_len_data_dir;
+
+    /*
+     * Ignore cross-platform directories that can contain x86-64 binaries.
+     */
+    const char *platform_paths[] = {
+        "/usr/i686-linux-gnu/",
+        "/usr/x86_64-linux-gnu/",
+        "/usr/x86_64-linux-gnux32/",
+    };
+    size_t num_platform_paths =
+        sizeof(platform_paths) / sizeof(platform_paths[0]);
+    for (size_t i = 0; i < num_platform_paths; i++) {
+        size_t pp_len = strlen(platform_paths[i]);
+        if (strncmp(path, platform_paths[i], pp_len) == 0)
+            goto success;
+    }
 
     fd = open(filename, O_RDONLY);
     if (fd == -1) {
@@ -120,6 +134,11 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
         elf_perror(path);
         goto error;
     }
+
+    /* Only allow x86-64 binaries */
+    if (ehdr->e_ident[EI_CLASS] != ELFCLASS64 ||
+        ehdr->e_machine != EM_X86_64)
+        goto success;
 
     if (ehdr->e_type == ET_EXEC) {
         is_lib = 0;
@@ -153,6 +172,9 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
         goto success;
     }
 
+    /*
+     * Scan ELF sections.
+     */
     Elf_Data *dynamic_data = NULL;
     GElf_Shdr dynamic_shdr = { 0 };
     Elf_Data *dynsym_data = NULL;
@@ -204,8 +226,11 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
             "DELETE FROM so_reference WHERE path='%s';\n",
             path);
 
+    /*
+     * Extract sonames.
+     */
     const char *soname = "";
-    num_ref = 0;
+    size_t num_so_ref = 0;
     if (dynamic_data) {
         size_t nentries = dynamic_shdr.sh_entsize ?
                           dynamic_shdr.sh_size / dynamic_shdr.sh_entsize :
@@ -224,36 +249,23 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
                 const char *needed = elf_strptr(elf, dynamic_shdr.sh_link,
                         dyn->d_un.d_val);
                 fprintf(g_out_ref, "%s('%s','%s')",
-                        num_ref ?
+                        num_so_ref ?
                             ",\n" :
                             "INSERT INTO so_reference"
                             " (path, soname) VALUES\n",
-                        path,
-                        needed);
-                num_ref += 1;
+                        path, needed);
+                num_so_ref += 1;
             }
         }
     }
-
-    /*
-     * libc has an INTERP program header and is misidentified as PIE
-     * executable.
-     */
-    if (strcmp(soname, "libc.so.6") == 0)
-        is_lib = 1;
-
-    if (num_ref)
+    if (num_so_ref)
         fprintf(g_out_ref, ";\n");
 
-    fprintf(g_out_ref,
-            "INSERT INTO binary (path, soname, package) VALUES\n"
-            "('%s','%s','%s');\n",
-            path,
-            soname,
-            g_package);
-
-    num_ref = 0;
-    num_def = 0;
+    /*
+     * Extract dynamic symbols.
+     */
+    size_t num_ref = 0;
+    size_t num_def = 0;
     if (dynsym_data != NULL) {
         int nrelocs = find_copy_relocs(elf, elf_ndxscn(scn), NULL);
         if (nrelocs < 0) {
@@ -356,13 +368,12 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
                 continue;
 
             /* Special sections */
-            if (sym->st_shndx >= SHN_LORESERVE)
+            if (sym->st_shndx >= SHN_LORESERVE &&
+                sym->st_shndx != SHN_XINDEX)
                 continue;
 
             int defined = 0;
-            if (bind == STB_WEAK) {
-                defined = 1;
-            } else if (sym->st_shndx != SHN_UNDEF) {
+            if (sym->st_shndx != SHN_UNDEF) {
                 defined = 1;
                 for (int i = 0; i < nrelocs; i++) {
                     if (relocs[i] == cnt) {
@@ -388,18 +399,23 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
                 const char *prefix = num_ref ?
                          ",\n" :
                          "INSERT OR IGNORE INTO reference"
-                         " (path, type, symbol) VALUES\n";
-                fprintf(g_out_ref, "%s('%s','%c','%s')",
-                        prefix, path, type_char, name);
+                         " (path, type, symbol, bind) VALUES\n";
+                fprintf(g_out_ref, "%s('%s','%c','%s','%c')",
+                        prefix, path, type_char, name, bind_char);
                 num_ref += 1;
             }
         }
     }
-
     if (num_def)
         fprintf(g_out_def, ";\n");
     if (num_ref)
         fprintf(g_out_ref, ";\n");
+
+    if (num_def || num_ref || num_so_ref)
+        fprintf(g_out_def,
+                "INSERT INTO binary (path, soname, package) VALUES\n"
+                "('%s','%s','%s');\n",
+                path, soname, g_package);
 
 success:
     ret = 0;
