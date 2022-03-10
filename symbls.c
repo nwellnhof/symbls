@@ -12,7 +12,13 @@
 #include <gelf.h>
 
 #ifndef R_X86_64_COPY
-#define R_X86_64_COPY 5
+  #define R_X86_64_COPY 5
+#endif
+#ifndef STT_GNU_IFUNC
+  #define STT_GNU_IFUNC 10
+#endif
+#ifndef STB_GNU_UNIQUE
+  #define STB_GNU_UNIQUE 10
 #endif
 
 static const char *g_package;
