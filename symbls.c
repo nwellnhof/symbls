@@ -185,6 +185,7 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
     GElf_Shdr dynamic_shdr = { 0 };
     Elf_Data *dynsym_data = NULL;
     GElf_Shdr dynsym_shdr = { 0 };
+    size_t dynsym_ndx;
     Elf_Data *versym_data = NULL;
     GElf_Shdr versym_shdr = { 0 };
     Elf_Scn *scn = NULL;
@@ -209,6 +210,7 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
             case SHT_DYNSYM:
                 dynsym_data = data;
                 dynsym_shdr = *shdr;
+                dynsym_ndx = elf_ndxscn(scn);
                 break;
             case SHT_GNU_versym:
                 versym_data = data;
@@ -273,7 +275,7 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
     size_t num_ref = 0;
     size_t num_def = 0;
     if (dynsym_data != NULL) {
-        int nrelocs = find_copy_relocs(elf, elf_ndxscn(scn), NULL);
+        int nrelocs = find_copy_relocs(elf, dynsym_ndx, NULL);
         if (nrelocs < 0) {
             elf_perror(path);
             goto error;
@@ -284,7 +286,7 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
             perror(path);
             goto error;
         }
-        if (find_copy_relocs(elf, elf_ndxscn(scn), relocs) < 0) {
+        if (find_copy_relocs(elf, dynsym_ndx, relocs) < 0) {
             elf_perror(path);
             goto error;
         }
