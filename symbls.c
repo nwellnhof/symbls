@@ -329,6 +329,8 @@ process_file(const char *filename, const struct stat *sb, int typeflag,
                     type_char = 'I';
                     break;
                 case STT_NOTYPE:
+                    type_char = 'N';
+                    break;
                 case STT_SECTION:
                     continue;
                 default:
